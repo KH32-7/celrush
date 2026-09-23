@@ -1,0 +1,331 @@
+/* Colors come from tuning/palette.ts via CSS variables set at boot (no color literals here). */
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--ink);
+  font-family: 'Arial Black', 'Segoe UI Black', Impact, 'Malgun Gothic', sans-serif;
+  user-select: none;
+}
+
+#game,
+#hud {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  display: block;
+}
+
+#hud {
+  pointer-events: none;
+}
+
+#ui {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  color: var(--ink);
+}
+
+.screen {
+  position: absolute;
+  inset: 0;
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  padding: 24px;
+  box-sizing: border-box;
+}
+
+.screen.dim {
+  background: color-mix(in srgb, var(--ink) 55%, transparent);
+}
+
+/* manga focus lines behind the title */
+.focus-lines {
+  position: absolute;
+  inset: -20%;
+  background: repeating-conic-gradient(from 0deg at 50% 46%, var(--ink) 0deg 0.7deg, transparent 0.7deg 4.3deg);
+  mask-image: radial-gradient(circle at 50% 46%, transparent 26%, black 60%);
+  -webkit-mask-image: radial-gradient(circle at 50% 46%, transparent 26%, black 60%);
+  opacity: 0.55;
+  animation: spin 40s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.logo {
+  position: relative;
+  font-size: clamp(64px, 12vw, 180px);
+  font-style: italic;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  line-height: 0.9;
+  color: var(--accent2);
+  -webkit-text-stroke: 0.08em var(--ink);
+  paint-order: stroke fill;
+  text-shadow: 0.07em 0.07em 0 var(--ink);
+  transform: skewX(-10deg) rotate(-4deg);
+}
+
+.logo .r {
+  color: var(--accent);
+}
+
+.logo-sub {
+  position: relative;
+  font-family: 'Malgun Gothic', sans-serif;
+  font-weight: 900;
+  font-size: clamp(16px, 2.2vw, 26px);
+  background: var(--paper);
+  border: 4px solid var(--ink);
+  box-shadow: 6px 6px 0 var(--ink);
+  padding: 8px 20px;
+  transform: rotate(-2deg);
+}
+
+.press {
+  position: relative;
+  margin-top: 28px;
+  font-style: italic;
+  font-size: clamp(18px, 2vw, 26px);
+  color: var(--paper);
+  -webkit-text-stroke: 5px var(--ink);
+  paint-order: stroke fill;
+  animation: blink 1.1s steps(2) infinite;
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0.25;
+  }
+}
+
+.panel {
+  background: var(--paper);
+  border: 5px solid var(--ink);
+  box-shadow: 9px 9px 0 var(--ink);
+  padding: 18px 22px;
+  position: relative;
+}
+
+.panel h2 {
+  margin: 0 0 12px;
+  font-style: italic;
+  font-size: 22px;
+  letter-spacing: 0.02em;
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+}
+
+.panel h2 small {
+  font-family: 'Malgun Gothic', sans-serif;
+  font-size: 13px;
+  color: var(--dim);
+}
+
+.select-wrap {
+  display: grid;
+  grid-template-columns: minmax(200px, 250px) minmax(300px, 420px) minmax(220px, 280px);
+  gap: 26px;
+  align-items: start;
+  max-width: 1100px;
+  width: 100%;
+}
+
+.select-wrap .panel:nth-child(1) {
+  transform: rotate(-1.2deg);
+}
+
+.select-wrap .panel:nth-child(2) {
+  transform: rotate(0.6deg);
+}
+
+.select-wrap .panel:nth-child(3) {
+  transform: rotate(-0.8deg);
+}
+
+.btn {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  background: var(--paper-dim);
+  color: var(--ink);
+  border: 4px solid var(--ink);
+  box-shadow: 4px 4px 0 var(--ink);
+  padding: 10px 14px;
+  margin: 0 0 12px;
+  transition: transform 0.08s, box-shadow 0.08s, background 0.1s;
+  outline: none;
+}
+
+.btn:hover,
+.btn.focus {
+  transform: translate(-2px, -2px) rotate(-0.6deg);
+  box-shadow: 7px 7px 0 var(--ink);
+}
+
+.btn.focus {
+  outline: 4px dashed var(--accent);
+  outline-offset: 3px;
+}
+
+.btn.on {
+  background: var(--accent2);
+}
+
+.btn .t {
+  display: block;
+  font-style: italic;
+  font-size: 20px;
+}
+
+.btn .k {
+  display: block;
+  font-family: 'Malgun Gothic', sans-serif;
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--dim);
+  margin-top: 2px;
+}
+
+.btn.on .k {
+  color: var(--ink);
+}
+
+.course {
+  display: grid;
+  grid-template-columns: 92px 1fr;
+  gap: 12px;
+  align-items: center;
+}
+
+.course canvas {
+  width: 92px;
+  height: 64px;
+  background: var(--paper);
+  border: 3px solid var(--ink);
+}
+
+.best {
+  font-family: 'Malgun Gothic', sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  margin-top: 4px;
+}
+
+.go {
+  background: var(--accent);
+  color: var(--paper);
+  text-align: center;
+  font-size: 34px;
+  font-style: italic;
+  -webkit-text-stroke: 2px var(--ink);
+  paint-order: stroke fill;
+  margin-top: 6px;
+}
+
+.go.focus,
+.go:hover {
+  background: var(--accent);
+}
+
+.help {
+  font-family: 'Malgun Gothic', sans-serif;
+  font-weight: 700;
+  font-size: 13px;
+  background: var(--paper);
+  border: 3px solid var(--ink);
+  box-shadow: 5px 5px 0 var(--ink);
+  padding: 8px 14px;
+  max-width: 1100px;
+  text-align: center;
+  line-height: 1.7;
+}
+
+.help kbd {
+  font-family: inherit;
+  background: var(--ink);
+  color: var(--paper);
+  padding: 1px 7px;
+  margin: 0 2px;
+}
+
+.menu-col {
+  width: min(380px, 90vw);
+}
+
+.results table {
+  border-collapse: collapse;
+  width: min(520px, 90vw);
+  font-size: 20px;
+  font-style: italic;
+}
+
+.results td {
+  padding: 8px 10px;
+  border-bottom: 3px solid var(--ink);
+}
+
+.results tr.me td {
+  background: var(--accent2);
+}
+
+.results .big {
+  font-size: clamp(40px, 7vw, 86px);
+  font-style: italic;
+  color: var(--accent2);
+  -webkit-text-stroke: 0.07em var(--ink);
+  paint-order: stroke fill;
+  text-shadow: 0.06em 0.06em 0 var(--ink);
+  transform: rotate(-3deg) skewX(-8deg);
+}
+
+.badge {
+  display: inline-block;
+  background: var(--accent);
+  color: var(--paper);
+  padding: 4px 12px;
+  border: 3px solid var(--ink);
+  transform: rotate(-4deg);
+  font-style: italic;
+}
+
+.swatch {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 3px solid var(--ink);
+  vertical-align: -2px;
+  margin-right: 8px;
+}
+
+.loading {
+  font-style: italic;
+  font-size: 34px;
+  color: var(--paper);
+  -webkit-text-stroke: 6px var(--ink);
+  paint-order: stroke fill;
+}
+
+@media (max-width: 900px) {
+  .select-wrap {
+    grid-template-columns: 1fr;
+    max-height: 70vh;
+    overflow: auto;
+  }
+}
