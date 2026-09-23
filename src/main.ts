@@ -410,7 +410,7 @@ function render(alpha: number, dt: number, draw = true) {
   }
   hitStopT = Math.max(0, hitStopT - dt);
   loop.timeScale = hitStopT > 0 && !paused ? 0.06 : 1;
-  if (!paused) fx?.update(dt * loop.timeScale, race.racers, camera.cam.position);
+  if (!paused) fx?.update(dt * loop.timeScale, race.racers, camera.cam.position, _pos);
   for (const r of race.racers) r.vehicle.clearEvents();
 
   const camPos = camera.cam.position;

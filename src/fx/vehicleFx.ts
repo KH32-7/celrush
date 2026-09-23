@@ -8,6 +8,7 @@ import { Car } from '../vehicles/car';
 import { Surface } from '../world/ground';
 import { Blobs, Sparks } from './particles';
 import { Skids } from './skids';
+import { WakeTrails } from './wakeTrail';
 
 const _p = new Vector3();
 const _v = new Vector3();
@@ -26,6 +27,7 @@ export class VehicleFx {
   readonly blobs = new Blobs(1600);
   readonly sparks = new Sparks(800);
   readonly skids: Skids | null = null;
+  readonly trails: WakeTrails | null = null;
   private acc = new Map<string, number>();
 
   constructor(scene: Scene, private world: World) {
@@ -33,6 +35,9 @@ export class VehicleFx {
     if (world.def.vehicle === 'car') {
       this.skids = new Skids();
       scene.add(this.skids.mesh);
+    } else {
+      this.trails = new WakeTrails((x, z) => this.waterH(x, z));
+      scene.add(this.trails.mesh);
     }
   }
 
@@ -47,12 +52,14 @@ export class VehicleFx {
     return this.world.field ? this.world.field.heightAt(x, z) : 0;
   }
 
-  update(dt: number, racers: Racer[], cam: Vector3) {
+  /** focus: the vehicle the camera follows; spray on the sight line to it is thinned out */
+  update(dt: number, racers: Racer[], cam: Vector3, focus?: Vector3) {
     for (const r of racers) {
       if (r.vehicle instanceof Car) this.car(r, r.vehicle, dt);
       else this.boat(r, r.vehicle as Boat, dt);
     }
-    this.blobs.update(dt, cam);
+    this.blobs.update(dt, cam, focus);
+    this.trails?.update(dt);
     this.sparks.update(dt);
     this.skids?.flush();
   }
@@ -128,6 +135,19 @@ export class VehicleFx {
         wake?.stamp(_p.x, _p.z, 2.2, 0.16 * k);
       }
     }
+    // wake ribbons: two arms from the stern corners drifting outward (the V) + the prop wash down the middle
+    if (this.trails) {
+      const on = wet && spd > 3;
+      for (const side of [-1, 1]) {
+        b.localToWorld(_p.set(side * 1.0, 0, HULL_STERN_Z - 0.3), _p);
+        const spread = spd * 0.34;
+        this.trails.add(id * 3 + (side + 1), _p.x, _p.z, _r.x * side * spread, _r.z * side * spread,
+          0.32 + spd * 0.008 + (v.drift.active ? 0.3 : 0), 1.5 + spd * 0.02, on);
+      }
+      b.localToWorld(_p.set(0, 0, HULL_STERN_Z + 0.2), _p);
+      const wash = on && v.propSub > 0.3 && v.controls.throttle > 0.2;
+      this.trails.add(id * 3 + 1, _p.x, _p.z, 0, 0, 0.8 + spd * 0.012 + (v.drift.boosting ? 0.5 : 0), 0.9, wash);
+    }
     // bow spray, both sides
     if (wet && spd > 5) {
       const n = this.emit(`bow${id}`, spd * 1.3 * (0.35 + Math.min(1, v.bowWet * 2 + v.planing)), dt);
@@ -136,18 +156,18 @@ export class VehicleFx {
         const side = Math.random() < 0.5 ? -1 : 1;
         b.localToWorld(_p.set(side * rnd(0.8, 1.1), -0.1, rnd(-1.6, -0.6)), _p);
         _v.copy(_r).multiplyScalar(side * rnd(4, 6 + spd * 0.2)).add(_t.set(0, rnd(1.5, 2.5 + spd * 0.08), 0)).addScaledVector(b.vel, 0.4);
-        this.blobs.spawn(_p, _v, rnd(0.25, 0.4), rnd(0.45, 0.7), rnd(0.5, 0.75), FX.spray, 9.8, 0.6, this.waterH(_p.x, _p.z) - 0.4);
+        this.blobs.spawn(_p, _v, rnd(0.22, 0.34), rnd(0.35, 0.55), rnd(0.45, 0.65), FX.spray, 9.8, 0.6, this.waterH(_p.x, _p.z) - 0.4);
       }
     }
     // rooster tail from the prop
     if (v.propSub > 0.3 && v.controls.throttle > 0.3 && spd > 6) {
       const boost = v.drift.boosting ? 1 : 0;
       // rooster tail: a low arc left BEHIND the boat (world velocity mostly zero), tall only on boost
-      const n = this.emit(`rt${id}`, 8 + spd * 0.3 + boost * 20, dt);
+      const n = this.emit(`rt${id}`, 6 + spd * 0.2 + boost * 12, dt);
       for (let k = 0; k < n; k++) {
         b.localToWorld(_p.set(rnd(-0.2, 0.2), -0.2, HULL_STERN_Z + 0.9), _p);
-        _v.copy(_f).multiplyScalar(-rnd(0.05, 0.2) * spd).addScaledVector(_r, rnd(-1, 1)).add(_t.set(0, rnd(2, 3.2) + boost * 2.5, 0)).addScaledVector(b.vel, 0.15);
-        this.blobs.spawn(_p, _v, rnd(0.3, 0.45), rnd(0.55, 0.9) + boost * 0.4, rnd(0.55, 0.8), FX.spray, 9.8, 0.4, this.waterH(_p.x, _p.z) - 0.4);
+        _v.copy(_f).multiplyScalar(-rnd(0.05, 0.2) * spd).addScaledVector(_r, rnd(-1.2, 1.2)).add(_t.set(0, rnd(1.2, 2.0) + boost * 1.4, 0)).addScaledVector(b.vel, 0.15);
+        this.blobs.spawn(_p, _v, rnd(0.22, 0.34), rnd(0.4, 0.62) + boost * 0.25, rnd(0.4, 0.6), FX.spray, 9.8, 0.4, this.waterH(_p.x, _p.z) - 0.4);
       }
     }
     // drift spray wall off the swinging stern
@@ -215,10 +235,12 @@ export class VehicleFx {
     if (!isBoat && e.wallHit > 6) this.shockwave(e.wallPoint, e.wallPoint.y, Math.min(1.2, e.wallHit / 12), FX.sparkWhite);
     if (isBoat && e.splash > 4) {
       v.forward(_f);
-      for (let k = 0; k < 10; k++) {
-        b.localToWorld(_p.set(rnd(-0.8, 0.8), 0, -1.6), _p);
-        _v.set(rnd(-3, 3), rnd(3, 5 + e.splash * 0.4), rnd(-3, 3)).addScaledVector(b.vel, 0.4);
-        this.blobs.spawn(_p, _v, rnd(0.3, 0.5), rnd(0.8, 1.3), rnd(0.6, 0.9), FX.spray, 9.8, 0.6, _p.y - 0.8);
+      v.right(_r);
+      for (let k = 0; k < 8; k++) {
+        const side = k % 2 ? 1 : -1;
+        b.localToWorld(_p.set(side * rnd(0.7, 1.0), 0, rnd(-1.8, -1.0)), _p);
+        _v.copy(_r).multiplyScalar(side * rnd(3, 6)).add(_t.set(0, rnd(2.5, 3.5 + Math.min(3, e.splash * 0.25)), 0)).addScaledVector(b.vel, 0.4);
+        this.blobs.spawn(_p, _v, rnd(0.25, 0.4), rnd(0.55, 0.9), rnd(0.5, 0.75), FX.spray, 9.8, 0.6, _p.y - 0.8);
       }
     }
     if (e.stageUp) {
@@ -254,6 +276,7 @@ export class VehicleFx {
   }
 
   clear() {
+    this.trails?.clear();
     this.blobs.clear();
     this.sparks.clear();
     this.skids?.clear();

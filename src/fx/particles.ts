@@ -60,8 +60,16 @@ export class Blobs {
     this.alive.push(i);
   }
 
-  /** cam: blobs shrink away inside ~4 m of the camera so spray never becomes a wall over the screen */
-  update(dt: number, cam?: Vector3) {
+  /**
+   * cam: blobs shrink away inside ~4 m of the camera so spray never becomes a wall over the screen.
+   * focus: blobs on the camera -> focus sight line shrink too, so the player's vehicle stays visible.
+   */
+  update(dt: number, cam?: Vector3, focus?: Vector3) {
+    let lx = 0, ly = 0, lz = 0, ll = 0;
+    if (cam && focus) {
+      lx = focus.x - cam.x; ly = focus.y - cam.y; lz = focus.z - cam.z;
+      ll = lx * lx + ly * ly + lz * lz;
+    }
     let n = 0;
     const keep: number[] = [];
     for (const i of this.alive) {
@@ -84,7 +92,18 @@ export class Blobs {
         const u = p.life / 0.07 - 1;
         s *= 1 + 2.7 * u * u * u + 1.7 * u * u;
       }
-      if (cam) s *= smoothstep(1.5, 4.5, Math.hypot(p.x - cam.x, p.y - cam.y, p.z - cam.z));
+      if (cam) {
+        s *= smoothstep(1.5, 4.5, Math.hypot(p.x - cam.x, p.y - cam.y, p.z - cam.z));
+        if (ll > 1) {
+          const px = p.x - cam.x, py = p.y - cam.y, pz = p.z - cam.z;
+          const u = (px * lx + py * ly + pz * lz) / ll;
+          if (u > 0 && u < 1.08) {
+            const dx = px - lx * u, dy = py - ly * u, dz = pz - lz * u;
+            // clear tube, widest at the vehicle (~1.6 m) so the hull outline reads through the spray
+            s *= smoothstep(0.35, 0.8 + 1.1 * Math.min(1, u), Math.hypot(dx, dy, dz) / (0.6 + s * 0.5));
+          }
+        }
+      }
       _q.setFromAxisAngle(_axis.set(Math.sin(p.rx), 0.4, Math.cos(p.ry)).normalize(), p.rx + t * 2);
       _m.compose(_p.set(p.x, p.y, p.z), _q, _s.set(s, s * 0.85, s));
       this.mesh.setMatrixAt(n, _m);
