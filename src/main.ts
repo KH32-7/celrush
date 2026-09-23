@@ -1,5 +1,5 @@
 import './ui/style.css';
-import { type DirectionalLight, Quaternion, Vector3 } from 'three';
+import { type DirectionalLight, Quaternion, Vector2, Vector3 } from 'three';
 import { AudioSys, type AudioVoiceInput } from './audio/audio';
 import { ChaseCamera, type CamMode } from './camera/chase';
 import { emptyControls, Input } from './core/input';
@@ -48,6 +48,13 @@ let boostVis = 0;
 let lightningT = 4;
 let flash = 0;
 let invert = 0;
+/** impact frame + hit-stop (real seconds left), boost edge flash */
+let impactT = 0;
+let hitStopT = 0;
+let boostFlash = 0;
+let boostFlashHex: number = FX.spark[0];
+const impactPos = new Vector2(0.5, 0.5);
+const speedCenter = new Vector2(0.5, 0.54);
 let lastSel: Selection = { kind: 'car', course: 'harbor', mode: 'race' };
 const stats = { fps: 0 };
 let fpsAcc = 0;
@@ -100,6 +107,8 @@ function applyTheme(w: World) {
   f.uLift.value = t.grade.lift;
   f.uVignette.value = t.grade.vignette;
   f.uInk.value.copy(col(t.ink));
+  f.uImpactInk.value.copy(col(FX.impactInk));
+  f.uImpactPaper.value.copy(col(FX.impactPaper));
   f.uRain.value = t.id === 'storm' ? 1 : 0;
   f.uRainColor.value.copy(col(FX.rain));
   f.uFlashColor.value.copy(col(FX.lightning));
@@ -158,6 +167,8 @@ function startRace(sel: Selection) {
   hud.clearMessages();
   phase = 'race';
   finishT = 0;
+  hitStopT = impactT = boostFlash = 0;
+  loop.timeScale = 1;
   menu.hide();
   audio.init();
   audio.start(world!.def.vehicle, world!.theme.id === 'storm', race.racers.length - 1);
@@ -242,6 +253,23 @@ const _cf = new Vector3();
 const _rel = new Vector3();
 const _rv = new Vector3();
 const voiceIn: AudioVoiceInput[] = [];
+const _sp = new Vector3();
+const _cuv = new Vector2();
+
+/** world point -> 0..1 screen uv, null when behind the camera */
+function toScreen(p: Vector3, out: Vector2) {
+  _sp.copy(p).project(camera.cam);
+  if (_sp.z > 1 || _sp.z < -1) return null;
+  return out.set(_sp.x * 0.5 + 0.5, _sp.y * 0.5 + 0.5);
+}
+
+/** Big hits: freeze the sim for a few frames and cut to a two-tone impact frame. Off with "screen shake". */
+function impact(at: Vector3, stop: number, frame: number) {
+  if (!settings.shake) return;
+  if (!toScreen(at, impactPos)) impactPos.set(0.5, 0.5);
+  impactT = Math.max(impactT, frame);
+  hitStopT = Math.max(hitStopT, stop);
+}
 
 /** Other racers as heard from the camera: listener-space offset + closing speed for doppler. */
 function voiceInputs(focus: Racer, listenerVel: Vector3) {
@@ -344,14 +372,23 @@ function render(alpha: number, dt: number, draw = true) {
       audio.play('boost');
       camera.kick(9);
       camera.shake(0.18);
+      boostFlash = 0.5 + 0.25 * e.boost;
+      boostFlashHex = FX.spark[Math.max(0, e.boost - 1)];
+      boostVis = 1.35;
+      if (e.boost >= 3) impact(_pos, 0.06, 0);
       hud.message(['', 'MINI BOOST', 'SUPER BOOST!', 'ULTRA BOOST!!'][e.boost] || 'BOOST!', FX.spark[Math.max(0, e.boost - 1)]);
     }
     if (e.stageUp) audio.play('stage', e.stageUp);
     if (e.driftStart) audio.play('drift');
-    if (e.padHit) camera.kick(6);
+    if (e.padHit) {
+      camera.kick(6);
+      boostFlash = Math.max(boostFlash, 0.45);
+      boostFlashHex = FX.boostFlame;
+    }
     if (e.landed > 3) {
       audio.play(v.kind === 'boat' ? 'splash' : 'land', e.landed);
       camera.shake(Math.min(0.55, e.landed * 0.05));
+      if (e.landed > 10) impact(_pos, 0.07, 0.07);
     }
     if (e.cleanLanding) {
       hud.message('NICE LANDING!', UI.good);
@@ -360,6 +397,7 @@ function render(alpha: number, dt: number, draw = true) {
     if (e.wallHit > 2) {
       audio.play('hit', e.wallHit);
       camera.shake(Math.min(0.6, e.wallHit * 0.06));
+      if (e.wallHit > 8) impact(e.wallPoint, 0.08, 0.09);
     }
     if (e.splash > 5 && v.kind === 'boat') {
       audio.play('splash', e.splash * 0.5);
@@ -370,7 +408,9 @@ function render(alpha: number, dt: number, draw = true) {
       if (r.vehicle.events.wallHit > 3 && r.vehicle.body.pos.distanceTo(_pos) < 30) audio.play('hit', r.vehicle.events.wallHit * 0.4);
     }
   }
-  if (!paused) fx?.update(dt, race.racers, camera.cam.position);
+  hitStopT = Math.max(0, hitStopT - dt);
+  loop.timeScale = hitStopT > 0 && !paused ? 0.06 : 1;
+  if (!paused) fx?.update(dt * loop.timeScale, race.racers, camera.cam.position);
   for (const r of race.racers) r.vehicle.clearEvents();
 
   const camPos = camera.cam.position;
@@ -390,6 +430,20 @@ function render(alpha: number, dt: number, draw = true) {
   boostVis = damp(boostVis, v.drift.boosting ? 1 : 0, 6, dt);
   f.uBoost.value = boostVis * (settings.lines ? 1 : 0.4);
   f.uTime.value = world.env.time;
+  // speed-line vanishing point: where the vehicle is heading, eased and kept near the middle
+  _sp.copy(v.body.vel);
+  const hasDir = v.speed > 6 && camera.mode !== 'orbit';
+  const want = hasDir && toScreen(_f.copy(_pos).addScaledVector(_sp.normalize(), 60), _cuv) ? _cuv : _cuv.set(0.5, 0.54);
+  want.set(clamp(want.x, 0.3, 0.7), clamp(want.y, 0.42, 0.66));
+  speedCenter.x = damp(speedCenter.x, want.x, 5, dt);
+  speedCenter.y = damp(speedCenter.y, want.y, 5, dt);
+  (f.uCenter.value as Vector2).copy(speedCenter);
+  boostFlash = Math.max(0, boostFlash - dt * 6);
+  f.uBoostFlash.value = paused ? 0 : boostFlash * 0.35;
+  f.uBoostFlashColor.value.copy(col(boostFlashHex));
+  impactT = Math.max(0, impactT - dt);
+  f.uImpact.value = impactT > 0 && !paused ? 1 : 0;
+  (f.uImpactPos.value as Vector2).copy(impactPos);
   if (world.theme.id === 'storm' && !paused) {
     lightningT -= dt;
     if (lightningT <= 0) {
@@ -488,6 +542,9 @@ loop.start();
   get phase() { return phase; },
   pipeline, camera, stats, RENDER,
   setAuto(on: boolean) { if (race) race.autodrive = on; },
+  /** preview the hit effects: impact frame for `hold` seconds, boost flash of charge stage 1..3 */
+  testImpact(hold = 0.09) { if (race) impact(race.player.vehicle.body.pos, 0.08, hold); },
+  testBoost(stage = 3) { boostFlash = 0.5 + 0.25 * stage; boostFlashHex = FX.spark[stage - 1]; boostVis = 1.35; },
   /** freeze the simulation (camera/FX keep running) to inspect models with the orbit camera */
   set freeze(on: boolean) { debugFreeze = on; },
   get freeze() { return debugFreeze; },

@@ -79,6 +79,11 @@ export class Blobs {
       const t = p.life / p.max;
       let s = p.s0 + (p.s1 - p.s0) * Math.sqrt(t);
       if (t > 0.65) s *= 1 - (t - 0.65) / 0.35;
+      if (p.life < 0.07) {
+        // ease-out-back: 0 -> ~1.12 -> 1 over the first 70 ms
+        const u = p.life / 0.07 - 1;
+        s *= 1 + 2.7 * u * u * u + 1.7 * u * u;
+      }
       if (cam) s *= smoothstep(1.5, 4.5, Math.hypot(p.x - cam.x, p.y - cam.y, p.z - cam.z));
       _q.setFromAxisAngle(_axis.set(Math.sin(p.rx), 0.4, Math.cos(p.ry)).normalize(), p.rx + t * 2);
       _m.compose(_p.set(p.x, p.y, p.z), _q, _s.set(s, s * 0.85, s));

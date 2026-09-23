@@ -178,6 +178,9 @@ export const FX = {
   checkerB: 0x1a1a24,
   lightning: 0xf0f6ff,
   rain: 0xc8dcff,
+  /** two-tone manga impact frame (big hits, hard landings) */
+  impactInk: 0x14121f,
+  impactPaper: 0xfffaf0,
 };
 
 export const UI = {

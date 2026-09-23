@@ -158,6 +158,12 @@ uniform vec3 uInk;
 uniform float uSpeed, uBoost, uTime, uFlash, uInvert, uRain, uAspect, uLines;
 uniform vec3 uFlashColor;
 uniform vec3 uRainColor;
+uniform vec2 uCenter;
+uniform float uImpact;
+uniform vec2 uImpactPos;
+uniform vec3 uImpactInk, uImpactPaper;
+uniform float uBoostFlash;
+uniform vec3 uBoostFlashColor;
 ${NOISE_GLSL}
 
 vec3 toSRGB(vec3 c) {
@@ -166,7 +172,8 @@ vec3 toSRGB(vec3 c) {
 }
 
 void main() {
-  vec2 ctr = vec2(0.5, 0.54);
+  // vanishing point follows the direction of travel, so lines converge off-center in a slide
+  vec2 ctr = uCenter;
   vec2 dc = vUv - ctr;
   vec2 dca = dc * vec2(uAspect, 1.0);
   float r = length(dca);
@@ -216,6 +223,25 @@ void main() {
     float streak = step(0.92, h1 + 0.1) * step(y, 0.09) * step(abs(fract(rp.x * 140.0) - 0.5), 0.12);
     s = mix(s, uRainColor, streak * 0.45 * uRain);
     s = mix(s, s * vec3(0.9, 0.95, 1.0), 0.15 * uRain);
+  }
+
+  // boost: a short burst of the charge color pushed in from the screen edges
+  if (uBoostFlash > 0.0) {
+    s = mix(s, toSRGB(uBoostFlashColor), uBoostFlash * (0.2 + 0.8 * smoothstep(0.15, 0.85, r)));
+  }
+
+  // impact frame: the picture drops to two flat tones (negative) with burst rays from the hit point
+  if (uImpact > 0.0) {
+    vec3 ink = toSRGB(uImpactInk), paper = toSRGB(uImpactPaper);
+    float lum = dot(s, vec3(0.299, 0.587, 0.114));
+    float th = step(0.52, lum);
+    vec3 two = mix(paper, ink, th);
+    vec2 d = (vUv - uImpactPos) * vec2(uAspect, 1.0);
+    float ia = (atan(d.y, d.x) / 6.28318 + 0.5) * 72.0;
+    float rr = hash12(vec2(floor(ia), floor(uTime * 24.0)));
+    float ray = step(abs(fract(ia) - 0.5), 0.06 + 0.22 * rr) * step(0.62, rr) * smoothstep(0.12, 0.42, length(d));
+    two = mix(two, mix(ink, paper, th), ray);
+    s = mix(s, two, uImpact);
   }
 
   s *= 1.0 - uVignette * smoothstep(0.42, 1.05, r);
@@ -306,6 +332,9 @@ export class Pipeline {
       uSat: { value: 1.1 }, uContrast: { value: 1.05 }, uLift: { value: 0 }, uVignette: { value: 0.3 }, uInk: { value: new Color() },
       uSpeed: { value: 0 }, uBoost: { value: 0 }, uTime: { value: 0 }, uFlash: { value: 0 }, uInvert: { value: 0 }, uRain: { value: 0 },
       uAspect: { value: 1 }, uLines: { value: 1 }, uFlashColor: { value: new Color(1, 1, 1) }, uRainColor: { value: new Color(0.8, 0.85, 1) },
+      uCenter: { value: new Vector2(0.5, 0.54) }, uImpact: { value: 0 }, uImpactPos: { value: new Vector2(0.5, 0.5) },
+      uImpactInk: { value: new Color() }, uImpactPaper: { value: new Color() },
+      uBoostFlash: { value: 0 }, uBoostFlashColor: { value: new Color() },
     });
     this.mFxaa = pass(FXAA, { tSrc: { value: this.fin.texture }, uTexel: { value: new Vector2() } });
     this.quad = new Mesh(new PlaneGeometry(2, 2), this.mComp);

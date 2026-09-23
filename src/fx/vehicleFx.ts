@@ -200,8 +200,19 @@ export class VehicleFx {
         _v.set(Math.cos(a) * rnd(4, 7), rnd(1, 2.5) + (isBoat ? Math.min(3, e.landed * 0.25) : 0), Math.sin(a) * rnd(4, 7)).addScaledVector(b.vel, 0.5);
         this.blobs.spawn(_p, _v, rnd(0.3, 0.45), rnd(0.6, 0.95), rnd(0.45, 0.7), isBoat ? FX.spray : FX.dust, isBoat ? 9.8 : 1, 1.5, _p.y - 0.5);
       }
-      if (isBoat) this.world.wake?.stamp(b.pos.x, b.pos.z, 5 + e.landed * 0.3, 1.2);
+      if (isBoat) {
+        // foam ring that the wake map then spreads outward, plus a small core instead of a solid white disk
+        const wake = this.world.wake;
+        const R = 2.6 + Math.min(2.5, e.landed * 0.18);
+        for (let k = 0; k < 14; k++) {
+          const a = (k / 14) * Math.PI * 2;
+          wake?.stamp(b.pos.x + Math.cos(a) * R, b.pos.z + Math.sin(a) * R, 1.5, 0.9);
+        }
+        wake?.stamp(b.pos.x, b.pos.z, 2.2, 0.5);
+      }
+      if (e.landed > 6) this.shockwave(b.pos, b.pos.y - (isBoat ? 0.2 : 0.55), Math.min(1.6, e.landed / 10), isBoat ? FX.spray : FX.burst);
     }
+    if (!isBoat && e.wallHit > 6) this.shockwave(e.wallPoint, e.wallPoint.y, Math.min(1.2, e.wallHit / 12), FX.sparkWhite);
     if (isBoat && e.splash > 4) {
       v.forward(_f);
       for (let k = 0; k < 10; k++) {
@@ -226,6 +237,20 @@ export class VehicleFx {
       }
     }
     void r;
+  }
+
+  /** Manga impact ring: flat dashes thrown radially outward along the ground, no gravity, quick drag. */
+  private shockwave(at: Vector3, y: number, k: number, hex: number) {
+    const n = Math.round(18 + 10 * k);
+    const off = Math.random() * 6.28;
+    for (let i = 0; i < n; i++) {
+      const a = off + (i / n) * Math.PI * 2;
+      const c = Math.cos(a), s = Math.sin(a);
+      _p.set(at.x + c * 1.4, y + 0.15, at.z + s * 1.4);
+      const sp = rnd(16, 26) * (0.7 + 0.3 * k);
+      _v.set(c * sp, rnd(0, 0.6), s * sp);
+      this.sparks.spawn(_p, _v, rnd(0.18, 0.28), hex, 0, y, 1.6 + k);
+    }
   }
 
   clear() {
