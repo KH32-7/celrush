@@ -326,11 +326,13 @@ export function buildBoatWorld(def: CourseDef, renderer: WebGLRenderer): World {
       light.follow(focus);
       sky.position.copy(cam);
       water.update(cam, time);
-      for (const r of riverRocks) {
-        if (Math.abs(r.x - focus.x) < 100 && Math.abs(r.z - focus.z) < 100) wake.stamp(r.x, r.z, 4.5, 0.5 * dt * 60);
+      if (dt > 0) {
+        for (const r of riverRocks) {
+          if (Math.abs(r.x - focus.x) < 100 && Math.abs(r.z - focus.z) < 100) wake.stamp(r.x, r.z, 4.5, 0.5 * dt * 60);
+        }
+        wakeCenter.copy(focus);
+        wake.update(wakeCenter, dt);
       }
-      wakeCenter.copy(focus);
-      wake.update(wakeCenter, dt);
       water.setWake(wake.texture, wake.center, wake.size);
       // buoys bob on the swell and spring back after a hit
       for (const b of buoys) {
@@ -363,6 +365,7 @@ export function buildBoatWorld(def: CourseDef, renderer: WebGLRenderer): World {
     },
     dispose() {
       disposeScene(scene);
+      wake.dispose();
     },
   };
 }

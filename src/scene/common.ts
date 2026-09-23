@@ -199,7 +199,7 @@ export function rockGeometry(t: Theme, seed: number, detail = 1) {
   }
   const mb = new MeshBuilder();
   const c1 = col(t.ground.rock), c2 = col(t.ground.rock2);
-  const ng = g.toNonIndexed();
+  const ng = g.index ? g.toNonIndexed() : g;
   const p = ng.getAttribute('position');
   const rng = new Rng(seed);
   for (let i = 0; i < p.count; i += 3) {

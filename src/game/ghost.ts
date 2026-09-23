@@ -13,6 +13,8 @@ export class GhostRecorder {
   }
 
   record(dt: number, p: Vector3, q: Quaternion) {
+    // sample 0 is the lap start, so playback index i lines up with t = i / RATE
+    if (this.buf.length === 0) this.buf.push(p.x, p.y, p.z, q.x, q.y, q.z, q.w);
     this.acc += dt;
     while (this.acc >= 1 / RATE) {
       this.acc -= 1 / RATE;

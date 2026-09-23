@@ -14,6 +14,8 @@ const _v = new Vector3();
 const _f = new Vector3();
 const _r = new Vector3();
 const _u = new Vector3();
+/** scratch for velocity offsets inside emit loops (no per-particle allocation) */
+const _t = new Vector3();
 const rnd = (a: number, b: number) => a + Math.random() * (b - a);
 
 /**
@@ -72,7 +74,7 @@ export class VehicleFx {
       const n = this.emit(`s${id}${i}`, w.skid > 0.45 ? 8 + 16 * w.skid : 0, dt);
       for (let k = 0; k < n; k++) {
         _p.copy(w.cp).addScaledVector(_u, 0.15).addScaledVector(_f, -0.3);
-        _v.copy(_f).multiplyScalar(-rnd(0.5, 2)).addScaledVector(_r, rnd(-1, 1)).add(new Vector3(0, rnd(0.6, 1.4), 0)).addScaledVector(b.vel, 0.12);
+        _v.copy(_f).multiplyScalar(-rnd(0.5, 2)).addScaledVector(_r, rnd(-1, 1)).add(_t.set(0, rnd(0.6, 1.4), 0)).addScaledVector(b.vel, 0.12);
         this.blobs.spawn(_p, _v, rnd(0.35, 0.5), rnd(1.2, 1.7), rnd(0.45, 0.7), FX.smoke, -1.2, 2.5);
       }
       // dust off the tarmac
@@ -80,7 +82,7 @@ export class VehicleFx {
       const nd = this.emit(`d${id}${i}`, off && spd > 5 ? spd * 1.4 : 0, dt);
       for (let k = 0; k < nd; k++) {
         _p.copy(w.cp).addScaledVector(_u, 0.15);
-        _v.copy(_f).multiplyScalar(-rnd(2, 5)).addScaledVector(_r, rnd(-2, 2)).add(new Vector3(0, rnd(1, 3), 0));
+        _v.copy(_f).multiplyScalar(-rnd(2, 5)).addScaledVector(_r, rnd(-2, 2)).add(_t.set(0, rnd(1, 3), 0));
         this.blobs.spawn(_p, _v, rnd(0.25, 0.4), rnd(1.0, 1.6), rnd(0.5, 0.8), FX.dust, 2, 2.2, w.cp.y);
       }
       // drift sparks in charge-stage color
@@ -88,7 +90,7 @@ export class VehicleFx {
         const ns = this.emit(`k${id}${i}`, 26 + v.drift.stage * 14, dt);
         for (let k = 0; k < ns; k++) {
           _p.copy(w.cp).addScaledVector(_u, 0.08);
-          _v.copy(_f).multiplyScalar(-rnd(3, 8)).addScaledVector(_r, rnd(-3, 3)).add(new Vector3(0, rnd(1.5, 4.5), 0)).addScaledVector(b.vel, 0.6);
+          _v.copy(_f).multiplyScalar(-rnd(3, 8)).addScaledVector(_r, rnd(-3, 3)).add(_t.set(0, rnd(1.5, 4.5), 0)).addScaledVector(b.vel, 0.6);
           this.sparks.spawn(_p, _v, rnd(0.2, 0.4), FX.spark[v.drift.stage - 1], 14, w.cp.y + 0.02);
         }
       }
@@ -133,7 +135,7 @@ export class VehicleFx {
       for (let k = 0; k < n; k++) {
         const side = Math.random() < 0.5 ? -1 : 1;
         b.localToWorld(_p.set(side * rnd(0.8, 1.1), -0.1, rnd(-1.6, -0.6)), _p);
-        _v.copy(_r).multiplyScalar(side * rnd(4, 6 + spd * 0.2)).add(new Vector3(0, rnd(1.5, 2.5 + spd * 0.08), 0)).addScaledVector(b.vel, 0.4);
+        _v.copy(_r).multiplyScalar(side * rnd(4, 6 + spd * 0.2)).add(_t.set(0, rnd(1.5, 2.5 + spd * 0.08), 0)).addScaledVector(b.vel, 0.4);
         this.blobs.spawn(_p, _v, rnd(0.25, 0.4), rnd(0.45, 0.7), rnd(0.5, 0.75), FX.spray, 9.8, 0.6, this.waterH(_p.x, _p.z) - 0.4);
       }
     }
@@ -144,7 +146,7 @@ export class VehicleFx {
       const n = this.emit(`rt${id}`, 8 + spd * 0.3 + boost * 20, dt);
       for (let k = 0; k < n; k++) {
         b.localToWorld(_p.set(rnd(-0.2, 0.2), -0.2, HULL_STERN_Z + 0.9), _p);
-        _v.copy(_f).multiplyScalar(-rnd(0.05, 0.2) * spd).addScaledVector(_r, rnd(-1, 1)).add(new Vector3(0, rnd(2, 3.2) + boost * 2.5, 0)).addScaledVector(b.vel, 0.15);
+        _v.copy(_f).multiplyScalar(-rnd(0.05, 0.2) * spd).addScaledVector(_r, rnd(-1, 1)).add(_t.set(0, rnd(2, 3.2) + boost * 2.5, 0)).addScaledVector(b.vel, 0.15);
         this.blobs.spawn(_p, _v, rnd(0.3, 0.45), rnd(0.55, 0.9) + boost * 0.4, rnd(0.55, 0.8), FX.spray, 9.8, 0.4, this.waterH(_p.x, _p.z) - 0.4);
       }
     }
@@ -154,14 +156,14 @@ export class VehicleFx {
       const n = this.emit(`dw${id}`, 12 + spd * 0.3, dt);
       for (let k = 0; k < n; k++) {
         b.localToWorld(_p.set(side * 1.1, 0, rnd(0, HULL_STERN_Z)), _p);
-        _v.copy(_r).multiplyScalar(side * rnd(6, 10)).add(new Vector3(0, rnd(2.5, 4.5), 0)).addScaledVector(_f, -rnd(1, 3));
+        _v.copy(_r).multiplyScalar(side * rnd(6, 10)).add(_t.set(0, rnd(2.5, 4.5), 0)).addScaledVector(_f, -rnd(1, 3));
         this.blobs.spawn(_p, _v, rnd(0.3, 0.45), rnd(0.7, 1.1), rnd(0.5, 0.75), FX.spray, 9.8, 0.7, this.waterH(_p.x, _p.z) - 0.4);
       }
       if (v.drift.stage > 0) {
         const ns = this.emit(`ds${id}`, 20 + v.drift.stage * 14, dt);
         for (let k = 0; k < ns; k++) {
           b.localToWorld(_p.set(side * 0.8, 0.1, HULL_STERN_Z), _p);
-          _v.copy(_r).multiplyScalar(side * rnd(2, 6)).add(new Vector3(0, rnd(2, 5), 0)).addScaledVector(b.vel, 0.5);
+          _v.copy(_r).multiplyScalar(side * rnd(2, 6)).add(_t.set(0, rnd(2, 5), 0)).addScaledVector(b.vel, 0.5);
           this.sparks.spawn(_p, _v, rnd(0.25, 0.45), FX.spark[v.drift.stage - 1], 9);
         }
       }
@@ -170,7 +172,7 @@ export class VehicleFx {
       const n = this.emit(`bb${id}`, 30, dt);
       for (let k = 0; k < n; k++) {
         b.localToWorld(_p.set(rnd(-0.2, 0.2), 0.5, HULL_STERN_Z + 0.8), _p);
-        _v.copy(_f).multiplyScalar(-rnd(4, 8)).add(new Vector3(0, rnd(0, 2), 0)).addScaledVector(b.vel, 0.8);
+        _v.copy(_f).multiplyScalar(-rnd(4, 8)).add(_t.set(0, rnd(0, 2), 0)).addScaledVector(b.vel, 0.8);
         this.sparks.spawn(_p, _v, rnd(0.15, 0.3), Math.random() < 0.5 ? FX.boostFlame : FX.flameCore, 2);
       }
     }
@@ -219,7 +221,7 @@ export class VehicleFx {
       v.forward(_f);
       for (let k = 0; k < 24; k++) {
         b.localToWorld(_p.set(rnd(-0.6, 0.6), 0, 2.3), _p);
-        _v.copy(_f).multiplyScalar(-rnd(6, 14)).add(new Vector3(rnd(-2, 2), rnd(0, 3), rnd(-2, 2))).addScaledVector(b.vel, 0.7);
+        _v.copy(_f).multiplyScalar(-rnd(6, 14)).add(_t.set(rnd(-2, 2), rnd(0, 3), rnd(-2, 2))).addScaledVector(b.vel, 0.7);
         this.sparks.spawn(_p, _v, rnd(0.25, 0.5), FX.spark[Math.max(0, e.boost - 1)], 4);
       }
     }

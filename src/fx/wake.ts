@@ -89,7 +89,19 @@ export class WakeMap {
     this.count++;
   }
 
+  private stepAcc = 0;
+
+  /** Advances the map in fixed 1/60 s steps (the spread blur is per step, so this keeps it refresh-rate independent). */
   update(focus: Vector3, dt: number) {
+    // stamps queued on frames with no step due are drawn by the next step
+    this.stepAcc = Math.min(this.stepAcc + dt, 4 / 60);
+    while (this.stepAcc >= 1 / 60) {
+      this.stepAcc -= 1 / 60;
+      this.step(focus, 1 / 60);
+    }
+  }
+
+  private step(focus: Vector3, dt: number) {
     const texel = this.size / this.res;
     const nx = Math.round(focus.x / texel) * texel;
     const nz = Math.round(focus.z / texel) * texel;
@@ -116,5 +128,18 @@ export class WakeMap {
     const t = this.rtA;
     this.rtA = this.rtB;
     this.rtB = t;
+  }
+
+  dispose() {
+    this.rtA.dispose();
+    this.rtB.dispose();
+    for (const sc of [this.decayScene, this.stampScene]) {
+      sc.traverse((o) => {
+        const m = o as Mesh;
+        if (!m.isMesh) return;
+        m.geometry.dispose();
+        (m.material as ShaderMaterial).dispose();
+      });
+    }
   }
 }

@@ -1,12 +1,13 @@
 import './ui/style.css';
-import { Quaternion, Vector3 } from 'three';
-import { AudioSys } from './audio/audio';
+import { type DirectionalLight, Quaternion, Vector3 } from 'three';
+import { AudioSys, type AudioVoiceInput } from './audio/audio';
 import { ChaseCamera, type CamMode } from './camera/chase';
 import { emptyControls, Input } from './core/input';
 import { FixedLoop } from './core/loop';
 import { clamp, damp } from './core/math';
 import { VehicleFx } from './fx/vehicleFx';
 import { Race, type Mode } from './game/race';
+import type { Racer } from './game/racer';
 import { Pipeline } from './render/pipeline';
 import { toonGlobals } from './render/toon';
 import { buildWorld, type World } from './scene/world';
@@ -66,6 +67,14 @@ function applyQuality() {
   const caps = [1, 1.5, 2];
   RENDER.pixelRatioCap = caps[settings.quality];
   RENDER.shadowMapSize = settings.quality === 0 ? 1024 : 2048;
+  // apply to the live sun too; three reallocates the map on the next render
+  world?.scene.traverse((o) => {
+    const l = o as DirectionalLight;
+    if (!l.isDirectionalLight || !l.castShadow || l.shadow.mapSize.x === RENDER.shadowMapSize) return;
+    l.shadow.mapSize.set(RENDER.shadowMapSize, RENDER.shadowMapSize);
+    l.shadow.map?.dispose();
+    l.shadow.map = null;
+  });
   resize();
 }
 
@@ -133,6 +142,7 @@ function startAttract() {
 
 function startRace(sel: Selection) {
   lastSel = { ...sel };
+  menu.sel = { ...sel };
   try {
     localStorage.setItem('celrush.sel', JSON.stringify(lastSel));
   } catch {
@@ -143,15 +153,16 @@ function startRace(sel: Selection) {
   fx?.clear();
   race = new Race(world!, sel.mode, hooks);
   race.autodrive = params.get('auto') === '1';
-  camera.mode = camModes[camModeI];
   camera.snap();
-  camera.startIntro();
+  camera.startIntro(camModes[camModeI]);
   hud.clearMessages();
   phase = 'race';
   finishT = 0;
   menu.hide();
   audio.init();
-  audio.start(world!.def.vehicle, world!.theme.id === 'storm');
+  audio.start(world!.def.vehicle, world!.theme.id === 'storm', race.racers.length - 1);
+  audio.setTheme(world!.theme.id);
+  audio.setIntensity(1);
   audio.startMusic();
 }
 
@@ -174,6 +185,8 @@ const menu = new Menu(
     quit() {
       phase = 'select';
       audio.stopLoops();
+      audio.setTheme('menu');
+      audio.setIntensity(0);
       startAttract();
       menu.showSelect();
     },
@@ -223,6 +236,31 @@ const _pos = new Vector3();
 const _q = new Quaternion();
 const _f = new Vector3();
 const _u = new Vector3();
+const _cr = new Vector3();
+const _cu = new Vector3();
+const _cf = new Vector3();
+const _rel = new Vector3();
+const _rv = new Vector3();
+const voiceIn: AudioVoiceInput[] = [];
+
+/** Other racers as heard from the camera: listener-space offset + closing speed for doppler. */
+function voiceInputs(focus: Racer, listenerVel: Vector3) {
+  voiceIn.length = 0;
+  if (!race) return voiceIn;
+  const cam = camera.cam;
+  _cr.set(1, 0, 0).applyQuaternion(cam.quaternion);
+  _cu.set(0, 1, 0).applyQuaternion(cam.quaternion);
+  _cf.set(0, 0, -1).applyQuaternion(cam.quaternion);
+  for (const r of race.racers) {
+    if (r === focus) continue;
+    const ov = r.vehicle;
+    _rel.copy(ov.body.pos).sub(cam.position);
+    const d = Math.max(0.5, _rel.length());
+    _rv.copy(ov.body.vel).sub(listenerVel);
+    voiceIn.push({ x: _rel.dot(_cr), y: _rel.dot(_cu), z: _rel.dot(_cf), closing: -_rv.dot(_rel) / d, rpm: ov.rpm });
+  }
+  return voiceIn;
+}
 
 function focusRacer() {
   if (!race) return null;
@@ -231,8 +269,12 @@ function focusRacer() {
 }
 
 function handleEdges() {
+  input.pollPad();
+  const inMenu = phase !== 'race';
+  const stick = (e: 'up' | 'down' | 'left' | 'right') => input.consumeStick(e) && inMenu;
   const nav = {
-    up: input.consume('up'), down: input.consume('down'), left: input.consume('left'), right: input.consume('right'),
+    up: input.consume('up') || stick('up'), down: input.consume('down') || stick('down'),
+    left: input.consume('left') || stick('left'), right: input.consume('right') || stick('right'),
     confirm: input.consume('confirm'), back: false,
   };
   const esc = input.consume('pause');
@@ -290,7 +332,7 @@ function render(alpha: number, dt: number, draw = true) {
   const airborne = v instanceof Car ? v.contacts === 0 : !(v as Boat).grounded;
   const groundAt = (x: number, z: number) =>
     world!.env.ground ? world!.env.ground.heightAt(x, z, v.proj.idx) : world!.field ? world!.field.heightAt(x, z) : 0;
-  camera.update(dt, {
+  camera.update(paused ? 0 : dt, {
     pos: _pos, quat: _q, vel: v.body.vel, speed: v.speed, topSpeed: top, kind: v.kind, boosting: v.drift.boosting,
     driftDir: v.drift.active ? v.drift.dir : 0, airborne,
   }, groundAt);
@@ -332,7 +374,7 @@ function render(alpha: number, dt: number, draw = true) {
   for (const r of race.racers) r.vehicle.clearEvents();
 
   const camPos = camera.cam.position;
-  world.update(dt, world.env.time, _pos, camPos);
+  world.update(paused ? 0 : dt, world.env.time, _pos, camPos);
   toonGlobals.uTime.value = world.env.time;
   if (world.theme.night) {
     v.forward(_f);
@@ -384,7 +426,7 @@ function render(alpha: number, dt: number, draw = true) {
       boostFrac: pv.drift.boosting ? pv.drift.boostTime / pv.drift.boostMax : 0, boosting: pv.drift.boosting,
       drift: { active: pv.drift.active, stage: pv.drift.stage, frac: pv.drift.chargeFrac },
       lap: clamp(p.lap + 1, 1, race.laps), laps: race.laps, place: p.place, count: race.racers.length,
-      time: race.clock, lapTime: race.state === 'racing' ? race.clock - p.lapStart : 0, best: p.best,
+      time: p.finished ? p.finishTime : race.clock, lapTime: race.state === 'racing' ? race.clock - p.lapStart : 0, best: p.best,
       countdown: race.countdown, survival: race.mode === 'survival' ? race.survivalLeft : null, distance: race.distance,
       wrongWay: p.wrongT > 1.2 && race.state === 'racing',
       racers: race.racers.map((r) => ({ x: r.vehicle.body.pos.x, z: r.vehicle.body.pos.z, player: r.isPlayer, livery: r.livery })),
@@ -395,16 +437,22 @@ function render(alpha: number, dt: number, draw = true) {
 
   // audio
   const offroad = v instanceof Car && (v.surface === Surface.Runoff || v.surface === Surface.Dirt);
+  if (phase === 'race' && race.state === 'racing') {
+    const tense = race.mode === 'survival' ? race.survivalLeft < 10 : race.mode === 'race' && race.player.lap >= race.laps - 1;
+    audio.setIntensity(tense ? 2 : 1);
+  }
   audio.update({
     rpm: v.rpm, throttle: v.controls.throttle, speed: v.speed, skid: v.skid, offroad,
     wet: v instanceof Boat ? v.wetRatio : 0, boost: v.drift.boosting, airborne,
-  }, paused || phase !== 'race');
+    gear: v instanceof Car ? v.gear : 0, prop: v instanceof Boat ? v.propSub : 1,
+  }, paused || phase !== 'race', voiceInputs(fr, v.body.vel));
 
   // finish -> results
   if (phase === 'race' && race.state === 'finished') {
     finishT += dt;
     if (finishT > 3.2) {
       phase = 'results';
+      audio.setIntensity(0);
       const p = race.player;
       let rec = false;
       if (race.mode === 'survival') rec = saveBest(world.def.id, 'survival', race.distance);
@@ -418,7 +466,8 @@ function render(alpha: number, dt: number, draw = true) {
 // ------------------------------------------------------------------ boot
 
 applyQuality();
-const autostart = params.get('course');
+const autostartId = params.get('course');
+const autostart = autostartId && [...coursesFor('car'), ...coursesFor('boat')].some((c) => c.id === autostartId) ? autostartId : null;
 if (autostart) {
   const def = courseById(autostart);
   lastSel = { kind: def.vehicle, course: def.id, mode: (params.get('mode') as Mode) || 'race' };

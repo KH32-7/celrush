@@ -20,6 +20,8 @@ export class Input {
   private steerKb = 0;
   autoThrottle = false;
   private padPrev: boolean[] = [];
+  private stickPrev: Edge | null = null;
+  private stickEdges = new Set<Edge>();
 
   constructor() {
     window.addEventListener('keydown', (e) => {
@@ -63,6 +65,31 @@ export class Input {
     return null;
   }
 
+  /** Turns gamepad button presses into edges. Called every frame (menus too), not only while driving. */
+  pollPad() {
+    const p = this.pad();
+    if (!p) return;
+    const edgesMap: [number, Edge][] = [[9, 'pause'], [3, 'respawn'], [8, 'camera'], [0, 'confirm'], [1, 'back'], [12, 'up'], [13, 'down'], [14, 'left'], [15, 'right']];
+    for (const [i, ed] of edgesMap) {
+      const pressed = !!p.buttons[i]?.pressed;
+      if (pressed && !this.padPrev[i]) this.edges.add(ed);
+      this.padPrev[i] = pressed;
+    }
+    // left stick drives the menus as well, with hysteresis so one push = one step
+    const ax = p.axes[0] ?? 0, ay = p.axes[1] ?? 0;
+    const dir: Edge | null = ay < -0.6 ? 'up' : ay > 0.6 ? 'down' : ax < -0.6 ? 'left' : ax > 0.6 ? 'right' : null;
+    if (dir && dir !== this.stickPrev) this.stickEdges.add(dir);
+    if (Math.abs(ax) < 0.35 && Math.abs(ay) < 0.35) this.stickPrev = null;
+    else if (dir) this.stickPrev = dir;
+  }
+
+  /** Stick edges only mean something in menus (in a race the stick steers). */
+  consumeStick(edge: Edge): boolean {
+    const had = this.stickEdges.has(edge);
+    this.stickEdges.delete(edge);
+    return had;
+  }
+
   /** Polls keyboard + first gamepad into a Controls value. Keyboard steer is ramped so taps feel analog. */
   read(dt: number, out: Controls): Controls {
     const left = this.down('ArrowLeft', 'KeyA');
@@ -90,13 +117,8 @@ export class Input {
       drift = drift || !!p.buttons[5]?.pressed || !!p.buttons[1]?.pressed || !!p.buttons[4]?.pressed;
       const ay = p.axes[1] ?? 0;
       if (Math.abs(ay) > 0.2) pitch = -ay;
-      const edgesMap: [number, Edge][] = [[9, 'pause'], [3, 'respawn'], [8, 'camera'], [0, 'confirm'], [1, 'back'], [12, 'up'], [13, 'down'], [14, 'left'], [15, 'right']];
-      for (const [i, ed] of edgesMap) {
-        const pressed = !!p.buttons[i]?.pressed;
-        if (pressed && !this.padPrev[i]) this.edges.add(ed);
-        this.padPrev[i] = pressed;
-      }
     }
+    this.pollPad();
     out.steer = steer;
     out.throttle = throttle;
     out.brake = brake;

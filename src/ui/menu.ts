@@ -185,7 +185,7 @@ export class Menu {
     let body: string;
     if (race.mode === 'survival') {
       head = `${Math.floor(race.distance)} m`;
-      body = `<p style="font-family:'Malgun Gothic';font-weight:900">버틴 시간 ${fmt(race.clock)} · 완주 랩 ${Math.max(0, p.lap)}</p>`;
+      body = `<p style="font-family:'Malgun Gothic';font-weight:900">버틴 시간 ${fmt(p.finishTime)} · 완주 랩 ${Math.max(0, p.lap)}</p>`;
     } else if (race.mode === 'time') {
       head = Number.isFinite(p.best) ? fmt(p.best) : 'DNF';
       body = `<table>${p.lapTimes.map((t, i) => `<tr class="${t === p.best ? 'me' : ''}"><td>LAP ${i + 1}</td><td style="text-align:right">${fmt(t)}</td></tr>`).join('')}

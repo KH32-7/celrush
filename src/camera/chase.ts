@@ -30,6 +30,7 @@ const _v = new Vector3();
 export class ChaseCamera {
   readonly cam: PerspectiveCamera;
   mode: CamMode = 'orbit';
+  private afterIntro: CamMode = 'chase';
   private dir = new Vector3(0, 0, -1);
   private pos = new Vector3();
   private look = new Vector3();
@@ -54,9 +55,11 @@ export class ChaseCamera {
     this.fovKick = Math.max(this.fovKick, deg);
   }
 
-  startIntro() {
+  /** Fly-around before the countdown, then settle into `after` (the player's chosen view). */
+  startIntro(after: CamMode = 'chase') {
     this.mode = 'intro';
     this.introT = 0;
+    this.afterIntro = after;
   }
 
   snap() {
@@ -118,7 +121,7 @@ export class ChaseCamera {
         wantPos.copy(tg.pos).addScaledVector(_d, -r);
         wantPos.y += lerp(4.5, height, k);
         fov = lerp(48, fov, k);
-        if (this.introT > 3.2) this.mode = 'chase';
+        if (this.introT > 3.2) this.mode = this.afterIntro;
       }
     }
 

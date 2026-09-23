@@ -1,10 +1,10 @@
-import { Object3D, Quaternion, Vector3 } from 'three';
+import { type Material, type Mesh, Object3D, Quaternion, Vector3 } from 'three';
 import type { Controls } from '../core/input';
 import { clamp } from '../core/math';
 import { contactSpheres } from '../physics/rigidbody';
 import type { World } from '../scene/world';
 import { UI } from '../tuning/palette';
-import { buildBoat, buildCar } from '../vehicles/models';
+import { buildBoat, buildCar, vehicleMaterials } from '../vehicles/models';
 import { AIDriver, RacingLine } from './ai';
 import { GhostRecorder, loadGhost, saveGhost, type GhostTrack } from './ghost';
 import { ghostify, Racer } from './racer';
@@ -54,6 +54,8 @@ export class Race {
   newRecord = false;
   autodrive = false;
   private finalLapShown = false;
+  /** survival distance frozen at TIME UP (the AI keeps driving the car afterwards) */
+  private finalDistance: number | null = null;
   readonly attract: boolean;
 
   constructor(readonly world: World, readonly mode: Mode, readonly hooks: RaceHooks, opts: { attract?: boolean } = {}) {
@@ -335,6 +337,10 @@ export class Race {
         this.ghost = loadGhost(this.world.def.id);
         this.newRecord = true;
         this.hooks.msg('NEW RECORD!', UI.accent2, true);
+        if (comp === this.laps - 1 && !this.finalLapShown) {
+          this.finalLapShown = true;
+          this.hooks.msg('FINAL LAP!', UI.accent, true);
+        }
         return;
       }
     }
@@ -349,6 +355,8 @@ export class Race {
   private finish() {
     this.state = 'finished';
     this.stateT = 0;
+    this.finalDistance = Math.max(0, this.player.progress);
+    if (this.ghostView) this.ghostView.visible = false;
     this.hooks.sound('finish');
     this.hooks.msg(this.mode === 'survival' ? 'TIME UP!' : 'FINISH!', UI.accent2, true);
     this.rank();
@@ -369,12 +377,23 @@ export class Race {
 
   /** distance covered in survival, meters */
   get distance() {
-    return Math.max(0, this.player.progress);
+    return this.finalDistance ?? Math.max(0, this.player.progress);
   }
 
   dispose() {
-    for (const r of this.racers) this.world.scene.remove(r.view.root);
-    if (this.ghostView) this.world.scene.remove(this.ghostView);
+    const shared = new Set<Material>(Object.values(vehicleMaterials()));
+    const free = (root: Object3D) => {
+      this.world.scene.remove(root);
+      root.traverse((o) => {
+        const m = o as Mesh;
+        if (!m.isMesh) return;
+        m.geometry.dispose();
+        const mat = m.material as Material;
+        if (!shared.has(mat)) mat.dispose();
+      });
+    };
+    for (const r of this.racers) free(r.view.root);
+    if (this.ghostView) free(this.ghostView);
   }
 }
 

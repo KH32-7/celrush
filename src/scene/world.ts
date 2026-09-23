@@ -1,4 +1,4 @@
-import type { Group, Mesh, Scene, Vector3, WebGLRenderer } from 'three';
+import type { DirectionalLight, Group, Mesh, Scene, Vector3, WebGLRenderer } from 'three';
 import type { WakeMap } from '../fx/wake';
 import type { WaterView } from '../render/water';
 import type { CourseDef } from '../track/courses';
@@ -40,6 +40,8 @@ export function buildWorld(def: CourseDef, renderer: WebGLRenderer): World {
 
 export function disposeScene(scene: Scene) {
   scene.traverse((o) => {
+    // shadow maps are render targets owned by the light, not reachable through materials
+    (o as DirectionalLight).shadow?.dispose();
     const m = o as Mesh;
     if (m.geometry) m.geometry.dispose();
     const mat = m.material as { dispose?: () => void } | { dispose?: () => void }[] | undefined;

@@ -126,12 +126,15 @@ export class WaveField {
       x0 = x - this.tmp.x;
       z0 = z - this.tmp.z;
     }
-    return [x0, z0] as const;
+    this.inv.x = x0;
+    this.inv.z = z0;
+    return this.inv;
   }
+  private readonly inv = { x: 0, z: 0 };
 
   heightAt(x: number, z: number, t = this.time) {
     if (this.n === 0) return 0;
-    const [x0, z0] = this.invert(x, z, t, 3);
+    const { x: x0, z: z0 } = this.invert(x, z, t, 3);
     let h = 0;
     for (let i = 0; i < this.n; i++) {
       h += this.a[i] * Math.sin(this.k[i] * (this.dx[i] * x0 + this.dz[i] * z0) - this.w[i] * t + this.ph[i]);
@@ -145,7 +148,7 @@ export class WaveField {
       out.h = 0; out.nx = 0; out.ny = 1; out.nz = 0; out.vx = 0; out.vy = 0; out.vz = 0;
       return out;
     }
-    const [x0, z0] = this.invert(x, z, t, 4);
+    const { x: x0, z: z0 } = this.invert(x, z, t, 4);
     let h = 0, nx = 0, ny = 1, nz = 0, vx = 0, vy = 0, vz = 0;
     for (let i = 0; i < this.n; i++) {
       const th = this.k[i] * (this.dx[i] * x0 + this.dz[i] * z0) - this.w[i] * t + this.ph[i];

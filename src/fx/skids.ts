@@ -1,4 +1,5 @@
 import { BufferAttribute, BufferGeometry, DynamicDrawUsage, Mesh, Vector3 } from 'three';
+import { DoubleSide } from 'three';
 import { makeToon } from '../render/toon';
 import { FX } from '../tuning/palette';
 
@@ -26,7 +27,7 @@ export class Skids {
     for (let i = 0; i < max; i++) idx.set([i * 4, i * 4 + 1, i * 4 + 2, i * 4, i * 4 + 2, i * 4 + 3], i * 6);
     g.setIndex(new BufferAttribute(idx, 1));
     g.setDrawRange(0, 0);
-    const mat = makeToon({ color: FX.skid, rim: 0 });
+    const mat = makeToon({ color: FX.skid, rim: 0, side: DoubleSide });
     mat.polygonOffset = true;
     mat.polygonOffsetFactor = -2;
     mat.polygonOffsetUnits = -4;
